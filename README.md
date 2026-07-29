@@ -14,7 +14,7 @@ on [sportnet.hr](https://sportnet.hr), on a schedule, via GitHub Actions.
   the whole page not loading, or a single article failing to parse — is
   caught and logged so the run always finishes and writes a feed (even an
   empty one) instead of crashing.
-- `.github/workflows/rss.yml` runs the script every 6 hours (and on manual
+- `.github/workflows/rss.yml` runs the script every hour (and on manual
   `workflow_dispatch`), then commits `feed.xml` back to the repo if it
   changed.
 
@@ -48,7 +48,7 @@ This writes/updates `feed.xml` in the repo root.
    pick branch `main` and folder `/ (root)`. Save.
 4. Once Pages is enabled, the feed will be publicly available at:
    `https://<your-username>.github.io/<repo-name>/feed.xml`
-5. The workflow runs automatically every 6 hours, or you can trigger it
+5. The workflow runs automatically every hour, or you can trigger it
    manually from the **Actions** tab via **Run workflow**
    (`workflow_dispatch`).
 
