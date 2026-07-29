@@ -100,16 +100,24 @@ def _extract_from_container(container) -> dict | None:
     if not _is_probable_article_link(href):
         return None
 
-    heading_candidates = []
-    for heading in container.find_all(["h1", "h2", "h3", "h4"]):
-        text = _text_or_none(heading)
-        if text and not _looks_like_byline(text):
-            heading_candidates.append(text)
+    # Some listing containers (e.g. a whole section block) wrap several
+    # teaser links at once, each with its own heading. Scoping the heading
+    # search to the specific link's own descendants first avoids picking up
+    # a sibling teaser's headline instead of this link's actual title; the
+    # wider container is only searched as a fallback for markup where the
+    # title sits next to the link rather than inside it.
+    def _heading_candidates(scope) -> list[str]:
+        candidates = []
+        for heading in scope.find_all(["h1", "h2", "h3", "h4"]):
+            text = _text_or_none(heading)
+            if text and not _looks_like_byline(text):
+                candidates.append(text)
+        title_class_text = _text_or_none(scope.find(class_=lambda c: c and "title" in c.lower()))
+        if title_class_text and not _looks_like_byline(title_class_text):
+            candidates.append(title_class_text)
+        return candidates
 
-    title_class_text = _text_or_none(container.find(class_=lambda c: c and "title" in c.lower()))
-    if title_class_text and not _looks_like_byline(title_class_text):
-        heading_candidates.append(title_class_text)
-
+    heading_candidates = _heading_candidates(link_tag) or _heading_candidates(container)
     title = max(heading_candidates, key=len) if heading_candidates else None
 
     if not title:
