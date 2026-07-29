@@ -52,16 +52,24 @@ def fetch_html(url: str) -> str | None:
 
 
 def _is_probable_article_link(href: str) -> bool:
-    """Filter out nav/social/anchor/asset links that aren't real articles."""
+    """Filter out nav/category/social/asset links that aren't real articles.
+
+    sportnet.hr article URLs always end in a numeric article ID
+    (e.g. .../629732/), while section/category pages (e.g. /nogomet/,
+    /kosarka/) don't — that's a much stronger signal than path depth for
+    telling the two apart, since a category link can otherwise look just
+    like a real one.
+    """
     if not href or href.startswith("#"):
         return False
     parsed = urlparse(urljoin(BASE_URL, href))
     if parsed.netloc and urlparse(BASE_URL).netloc not in parsed.netloc:
         return False
     path = parsed.path.rstrip("/")
-    if not path or path.count("/") < 1:
+    if not path:
         return False
-    if path.lower().endswith((".jpg", ".jpeg", ".png", ".gif", ".svg", ".css", ".js", ".pdf")):
+    last_segment = path.rsplit("/", 1)[-1]
+    if not last_segment.isdigit():
         return False
     return True
 
@@ -71,6 +79,15 @@ def _text_or_none(tag) -> str | None:
         return None
     text = tag.get_text(strip=True)
     return text or None
+
+
+def _looks_like_byline(text: str) -> bool:
+    """Bylines/credit lines (e.g. 'Piše: Petar Jenjić', 'Foto: ...') sometimes
+    sit in a heading tag ahead of the real headline within the same listing
+    item; treat them as non-title text rather than let them win as the title.
+    """
+    normalized = text.strip().lower()
+    return normalized.startswith(("piše", "pise", "autor", "foto:", "video:"))
 
 
 def _extract_from_container(container) -> dict | None:
@@ -83,12 +100,23 @@ def _extract_from_container(container) -> dict | None:
     if not _is_probable_article_link(href):
         return None
 
-    title_tag = (
-        container.find(["h1", "h2", "h3", "h4"])
-        or container.find(class_=lambda c: c and "title" in c.lower())
-        or link_tag
-    )
-    title = _text_or_none(title_tag) or _text_or_none(link_tag)
+    heading_candidates = []
+    for heading in container.find_all(["h1", "h2", "h3", "h4"]):
+        text = _text_or_none(heading)
+        if text and not _looks_like_byline(text):
+            heading_candidates.append(text)
+
+    title_class_text = _text_or_none(container.find(class_=lambda c: c and "title" in c.lower()))
+    if title_class_text and not _looks_like_byline(title_class_text):
+        heading_candidates.append(title_class_text)
+
+    title = max(heading_candidates, key=len) if heading_candidates else None
+
+    if not title:
+        link_text = _text_or_none(link_tag)
+        if link_text and not _looks_like_byline(link_text):
+            title = link_text
+
     if not title:
         return None
 

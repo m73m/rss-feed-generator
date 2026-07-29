@@ -1,4 +1,4 @@
-# Sportnet.hr RSS Feed Generator
+# RSS Feed Generator
 
 Automatically generates an RSS 2.0 feed (`feed.xml`) from the latest headlines
 on [sportnet.hr](https://sportnet.hr), on a schedule, via GitHub Actions.
