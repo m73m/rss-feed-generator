@@ -16,6 +16,7 @@ import re
 import sys
 from datetime import datetime, timezone
 from urllib.parse import urljoin, urlparse
+from xml.etree import ElementTree
 
 import requests
 from bs4 import BeautifulSoup
@@ -261,9 +262,49 @@ def parse_articles(html: str) -> list[dict]:
     return articles
 
 
-def fetch_all_articles() -> list[dict]:
-    """Fetch and parse every archive page, merging results with a global cap
-    and de-duplicating articles that show up on more than one page.
+def load_previous_items(path: str) -> list[dict]:
+    """Read the feed written by the previous run.
+
+    Its newest entry is the marker scraping stops at, and all of its entries
+    are carried forward into the new feed so the back catalogue survives.
+    Returns an empty list on the first run, or if the file is
+    missing/unparseable, in which case every page gets scraped.
+    """
+    try:
+        root = ElementTree.parse(path).getroot()
+    except (OSError, ElementTree.ParseError) as exc:
+        log.info("No usable previous feed at %s (%s) — scraping every page.", path, exc)
+        return []
+
+    items: list[dict] = []
+    for item in root.iterfind("./channel/item"):
+        link = item.findtext("link")
+        title = item.findtext("title")
+        if not link or not title:
+            continue
+        enclosure = item.find("enclosure")
+        items.append({
+            "title": title,
+            "link": link,
+            "summary": item.findtext("description"),
+            "image": enclosure.get("url") if enclosure is not None else None,
+            # Kept as the RFC-822 string it was written as; feedgen re-parses it.
+            "published": item.findtext("pubDate"),
+        })
+
+    log.info("Loaded %d item(s) from the previous feed.", len(items))
+    return items
+
+
+def fetch_all_articles(stop_link: str | None = None) -> list[dict]:
+    """Fetch archive pages newest-first, collecting articles until the newest
+    item from the previous run turns up.
+
+    Both the archive and the previous feed are ordered newest-first, so
+    reaching that one item means everything past it was already published —
+    there is nothing left to find and the remaining pages can be skipped.
+    If it is never found (e.g. it was removed from the archive), every page
+    is scraped, which is the safe fallback.
     """
     articles: list[dict] = []
     seen_links: set[str] = set()
@@ -284,6 +325,14 @@ def fetch_all_articles() -> list[dict]:
             continue
 
         for article in page_articles:
+            if stop_link is not None and article["link"] == stop_link:
+                log.info(
+                    "Reached the previous run's newest item on page %d — "
+                    "stopping with %d new item(s).",
+                    page, len(articles),
+                )
+                return articles
+
             if article["link"] in seen_links:
                 continue
             seen_links.add(article["link"])
@@ -324,11 +373,28 @@ def build_feed(articles: list[dict]) -> FeedGenerator:
 
 
 def main() -> int:
+    previous = load_previous_items(OUTPUT_PATH)
+
+    # Only the previous feed's newest item is used as the stopping marker.
+    stop_link = previous[0]["link"] if previous else None
+
     try:
-        articles = fetch_all_articles()
+        new_articles = fetch_all_articles(stop_link)
     except Exception as exc:  # noqa: BLE001 - one bad page must never crash the whole run
         log.error("Failed to fetch articles: %s", exc)
-        articles = []
+        new_articles = []
+
+    # Newly scraped items are the most recent, so they lead; the previous
+    # feed's entries follow to preserve history. Without carrying them over,
+    # a run that found nothing new would publish an empty feed.
+    new_links = {article["link"] for article in new_articles}
+    articles = new_articles + [item for item in previous if item["link"] not in new_links]
+    articles = articles[:MAX_ITEMS]
+
+    log.info(
+        "%d new, %d carried over, %d total item(s).",
+        len(new_articles), len(articles) - len(new_articles), len(articles),
+    )
 
     if not articles:
         log.warning("No articles found (fetch or parse failed) — writing an empty feed.")

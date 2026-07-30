@@ -16,6 +16,16 @@ on [sportnet.hr](https://sportnet.hr), on a schedule, via GitHub Actions.
   is caught and logged so the run always finishes and writes a feed (even an
   empty one) instead of crashing. Articles that appear on more than one page
   are de-duplicated by URL, and the total is capped at `MAX_ITEMS`.
+- Runs are **incremental**. Before scraping, the previous `sportnet_feed.xml`
+  is read and its newest entry is used as a stop marker: since both the
+  archive and the feed run newest-first, reaching that entry means everything
+  beyond it is already published, so the remaining pages are skipped. A
+  typical hourly run therefore fetches only page 1 instead of all ten.
+  Entries from the previous feed are carried forward and appended after the
+  new ones, so the back catalogue is preserved and a run that finds nothing
+  new republishes the existing feed unchanged rather than emptying it. If the
+  marker isn't found (e.g. it aged out of the archive), every page is scraped
+  as before.
 - `.github/workflows/rss.yml` runs the script every hour (and on manual
   `workflow_dispatch`), then commits `sportnet_feed.xml` back to the repo if it
   changed.
