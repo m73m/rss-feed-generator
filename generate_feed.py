@@ -130,12 +130,19 @@ def _extract_from_container(container) -> dict | None:
     if not title:
         return None
 
-    summary_tag = container.find(
-        ["p", "span"], class_=lambda c: c and any(k in c.lower() for k in ("summary", "excerpt", "desc", "lead"))
-    ) or container.find("p")
-    summary = _text_or_none(summary_tag)
+    # sportnet.hr wraps each listing item's intro text in <div class="uvod">.
+    uvod_div = container.find("div", class_="uvod")
+    if uvod_div is not None:
+        summary = _text_or_none(uvod_div)
+    else:
+        summary_tag = container.find(
+            ["p", "span"], class_=lambda c: c and any(k in c.lower() for k in ("summary", "excerpt", "desc", "lead"))
+        ) or container.find("p")
+        summary = _text_or_none(summary_tag)
 
-    img_tag = container.find("img")
+    # sportnet.hr wraps each listing item's thumbnail in <div class="img"><a><img></a></div>.
+    img_div = container.find("div", class_="img")
+    img_tag = img_div.find("img") if img_div is not None else container.find("img")
     image_url = None
     if img_tag is not None:
         image_url = img_tag.get("src") or img_tag.get("data-src")
