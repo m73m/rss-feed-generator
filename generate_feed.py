@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Generate an RSS 2.0 feed (feed.xml) from the latest headlines on sportnet.hr.
+"""Generate an RSS 2.0 feed (sportnet_feed.xml) from the latest headlines on sportnet.hr.
 
 The site's markup isn't guaranteed to follow a single fixed pattern, so this
 scraper tries several common article-listing shapes in order and falls back
@@ -21,7 +21,7 @@ from bs4 import BeautifulSoup
 from feedgen.feed import FeedGenerator
 
 BASE_URL = "https://sportnet.hr"
-OUTPUT_PATH = "feed.xml"
+OUTPUT_PATH = "sportnet_feed.xml"
 MAX_ITEMS = 30
 REQUEST_TIMEOUT = 15
 USER_AGENT = (

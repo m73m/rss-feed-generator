@@ -1,12 +1,12 @@
 # RSS Feed Generator
 
-Automatically generates an RSS 2.0 feed (`feed.xml`) from the latest headlines
+Automatically generates an RSS 2.0 feed (`sportnet_feed.xml`) from the latest headlines
 on [sportnet.hr](https://sportnet.hr), on a schedule, via GitHub Actions.
 
 ## How it works
 
 - `generate_feed.py` fetches the sportnet.hr homepage, scrapes the latest
-  articles, and writes a valid RSS 2.0 feed to `feed.xml` in the repo root
+  articles, and writes a valid RSS 2.0 feed to `sportnet_feed.xml` in the repo root
   using [feedgen](https://feedgen.kiesow.be/).
 - The scraper tries a few common article-listing patterns (`<article>` tags,
   common "post/news-item/card" class names, then a generic headline-link
@@ -15,7 +15,7 @@ on [sportnet.hr](https://sportnet.hr), on a schedule, via GitHub Actions.
   caught and logged so the run always finishes and writes a feed (even an
   empty one) instead of crashing.
 - `.github/workflows/rss.yml` runs the script every hour (and on manual
-  `workflow_dispatch`), then commits `feed.xml` back to the repo if it
+  `workflow_dispatch`), then commits `sportnet_feed.xml` back to the repo if it
   changed.
 
 **Note:** the exact selectors in `generate_feed.py` are best-effort generic
@@ -32,7 +32,7 @@ pip install -r requirements.txt
 python generate_feed.py
 ```
 
-This writes/updates `feed.xml` in the repo root.
+This writes/updates `sportnet_feed.xml` in the repo root.
 
 ## Enabling the scheduled workflow + hosting the feed via GitHub Pages
 
@@ -47,13 +47,13 @@ This writes/updates `feed.xml` in the repo root.
    **Build and deployment → Source**, choose **Deploy from a branch**, then
    pick branch `main` and folder `/ (root)`. Save.
 4. Once Pages is enabled, the feed will be publicly available at:
-   `https://<your-username>.github.io/<repo-name>/feed.xml`
+   `https://<your-username>.github.io/<repo-name>/sportnet_feed.xml`
 5. The workflow runs automatically every hour, or you can trigger it
    manually from the **Actions** tab via **Run workflow**
    (`workflow_dispatch`).
 
 ## Subscribing
 
-Point any RSS reader at your published `feed.xml` URL
-(`https://<your-username>.github.io/<repo-name>/feed.xml`) once GitHub Pages
+Point any RSS reader at your published `sportnet_feed.xml` URL
+(`https://<your-username>.github.io/<repo-name>/sportnet_feed.xml`) once GitHub Pages
 is live.

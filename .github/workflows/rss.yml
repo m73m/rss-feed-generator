@@ -26,14 +26,14 @@ jobs:
       - name: Generate feed
         run: python generate_feed.py
 
-      - name: Commit and push feed.xml if changed
+      - name: Commit and push sportnet_feed.xml if changed
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-          git add feed.xml
-          if ! git diff --cached --quiet -- feed.xml; then
-            git commit -m "Update feed.xml [skip ci]"
+          git add sportnet_feed.xml
+          if ! git diff --cached --quiet -- sportnet_feed.xml; then
+            git commit -m "Update sportnet_feed.xml [skip ci]"
             git push
           else
-            echo "No changes to feed.xml"
+            echo "No changes to sportnet_feed.xml"
           fi
