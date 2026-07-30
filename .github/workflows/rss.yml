@@ -2,7 +2,9 @@ name: Generate RSS feed
 
 on:
   schedule:
-    - cron: "0 */2 * * *"
+    # Deliberately off the hour boundary: GitHub delays or silently drops
+    # scheduled runs during high-load periods, and :00 is the busiest minute.
+    - cron: "23 */2 * * *"
   workflow_dispatch: {}
 
 permissions:

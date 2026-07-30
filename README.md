@@ -40,7 +40,15 @@ Each source writes its own feed file in the repo root:
   commit behind. A fresh build date is written as soon as the items change.
 - `.github/workflows/rss.yml` runs the script every 2 hours (and on manual
   `workflow_dispatch`), then commits any feed file that changed back to the
-  repo.
+  repo. The cron fires at `:23` rather than `:00` on purpose — GitHub delays
+  and sometimes drops scheduled runs at the top of the hour, when load peaks.
+
+**Scheduling caveat:** `schedule` triggers are best-effort on GitHub's side, so
+individual runs can be late by anything from minutes to hours, or skipped
+entirely. Nothing is lost when that happens — the next run simply picks up
+every item published since the last one. Note also that cron only fires from
+the repository's **default branch**; the schedule is ignored on every other
+branch, and changing the default branch re-registers it.
 
 **Note:** the selectors in `generate_feed.py` are matched to each source's
 current markup, with generic fallbacks. If a source changes its markup, inspect
