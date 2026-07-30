@@ -304,7 +304,9 @@ def build_feed(articles: list[dict]) -> FeedGenerator:
     fg.lastBuildDate(datetime.now(timezone.utc))
 
     for article in articles:
-        fe = fg.add_entry()
+        # feedgen prepends by default, which would reverse our newest-first
+        # scrape order and emit the feed oldest-first; append preserves it.
+        fe = fg.add_entry(order="append")
         fe.id(article["link"])
         fe.title(article["title"])
         fe.link(href=article["link"])
