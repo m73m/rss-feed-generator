@@ -12,6 +12,7 @@ still (re)written with whatever items were successfully collected.
 from __future__ import annotations
 
 import logging
+import re
 import sys
 from datetime import datetime, timezone
 from urllib.parse import urljoin, urlparse
@@ -19,6 +20,19 @@ from urllib.parse import urljoin, urlparse
 import requests
 from bs4 import BeautifulSoup
 from feedgen.feed import FeedGenerator
+
+try:  # stdlib on 3.9+, but needs system tzdata — fall back rather than crash
+    from zoneinfo import ZoneInfo
+
+    SITE_TZ = ZoneInfo("Europe/Zagreb")
+except Exception:  # noqa: BLE001 - a missing tz database must not break the run
+    SITE_TZ = timezone.utc
+
+# Listing items date themselves in Croatian d.m.Y. form ("29.07.2026."),
+# sometimes with a trailing time.
+DATE_RE = re.compile(
+    r"(\d{1,2})\.\s*(\d{1,2})\.\s*(\d{4})\.?(?:\s+(\d{1,2}):(\d{2}))?"
+)
 
 BASE_URL = "https://sportnet.hr"
 ARCHIVE_URL_TEMPLATE = "https://sportnet.hr/arhiva/?pg={page}"
@@ -83,6 +97,32 @@ def _text_or_none(tag) -> str | None:
     return text or None
 
 
+def _looks_like_date(text: str) -> bool:
+    """True when a heading holds nothing but a date, so date headings never
+    get mistaken for the item's title (a short headline could otherwise lose
+    the longest-candidate tie-break to '29.07.2026.').
+    """
+    return bool(DATE_RE.fullmatch(text.strip()))
+
+
+def _parse_date(text: str | None) -> datetime | None:
+    """Parse sportnet.hr's d.m.Y. listing date into an aware datetime."""
+    if not text:
+        return None
+    match = DATE_RE.search(text)
+    if match is None:
+        return None
+    day, month, year, hour, minute = match.groups()
+    try:
+        return datetime(
+            int(year), int(month), int(day),
+            int(hour or 0), int(minute or 0),
+            tzinfo=SITE_TZ,
+        )
+    except ValueError:  # e.g. an impossible day/month combination
+        return None
+
+
 def _looks_like_byline(text: str) -> bool:
     """Bylines/credit lines (e.g. 'Piše: Petar Jenjić', 'Foto: ...') sometimes
     sit in a heading tag ahead of the real headline within the same listing
@@ -112,7 +152,7 @@ def _extract_from_container(container) -> dict | None:
         candidates = []
         for heading in scope.find_all(["h1", "h2", "h3", "h4"]):
             text = _text_or_none(heading)
-            if text and not _looks_like_byline(text):
+            if text and not _looks_like_byline(text) and not _looks_like_date(text):
                 candidates.append(text)
         title_class_text = _text_or_none(scope.find(class_=lambda c: c and "title" in c.lower()))
         if title_class_text and not _looks_like_byline(title_class_text):
@@ -149,10 +189,19 @@ def _extract_from_container(container) -> dict | None:
         if image_url:
             image_url = urljoin(BASE_URL, image_url)
 
-    time_tag = container.find("time")
+    # sportnet.hr puts each listing item's post date in an <h4> ("29.07.2026.").
     published = None
-    if time_tag is not None:
-        published = time_tag.get("datetime") or _text_or_none(time_tag)
+    for heading in container.find_all("h4"):
+        published = _parse_date(_text_or_none(heading))
+        if published is not None:
+            break
+
+    if published is None:
+        time_tag = container.find("time")
+        if time_tag is not None:
+            # Left as a raw string for feedgen/dateutil to interpret, since a
+            # <time datetime> carries ISO form rather than the d.m.Y. above.
+            published = time_tag.get("datetime") or _text_or_none(time_tag)
 
     return {
         "title": title,
