@@ -1,44 +1,50 @@
 # RSS Feed Generator
 
-Automatically generates an RSS 2.0 feed (`sportnet_feed.xml`) from the latest headlines
-on [sportnet.hr](https://sportnet.hr), on a schedule, via GitHub Actions.
+Automatically generates RSS 2.0 feeds from a set of configured news sources,
+on a schedule, via GitHub Actions.
+
+Each source writes its own feed file in the repo root:
+
+| Feed file |
+| --- |
+| `sportnet_feed.xml` |
+| `fsb_feed.xml` |
 
 ## How it works
 
-- `generate_feed.py` fetches sportnet.hr's archive listing
-  (`https://sportnet.hr/arhiva/?pg=N` for pages 1 through 10), scrapes the
-  articles found across those pages, and writes a valid RSS 2.0 feed to
-  `sportnet_feed.xml` in the repo root using [feedgen](https://feedgen.kiesow.be/).
-- The scraper tries a few common article-listing patterns (`<article>` tags,
-  common "post/news-item/card" class names, then a generic headline-link
-  fallback) since it isn't tied to one exact markup shape. Any failure —
-  a single archive page not loading, or a single article failing to parse —
-  is caught and logged so the run always finishes and writes a feed (even an
-  empty one) instead of crashing. Articles that appear on more than one page
-  are de-duplicated by URL, and the total is capped at `MAX_ITEMS`.
-- Runs are **incremental**. Before scraping, the previous `sportnet_feed.xml`
-  is read and its newest entry is used as a stop marker: since both the
-  archive and the feed run newest-first, reaching that entry means everything
-  beyond it is already published, so the remaining pages are skipped. A
-  typical scheduled run therefore fetches only page 1 instead of all ten.
-  Entries from the previous feed are carried forward and appended after the
-  new ones, so the back catalogue is preserved and a run that finds nothing
-  new republishes the existing feed unchanged rather than emptying it. If the
-  marker isn't found (e.g. it aged out of the archive), every page is scraped
-  as before.
-- When the item set is unchanged, the previous `lastBuildDate` is reused
-  rather than restamped. That is the feed's only time-varying field, so the
-  file comes out byte-identical and the workflow commits nothing — quiet
-  hours leave no commit behind. A fresh build date is written as soon as the
-  items actually change.
+- `generate_feed.py` holds a `SOURCES` list. Each entry declares the pages to
+  fetch, the parser to use, the output file, and the feed's title and
+  description. Adding another source means appending one `Source` entry (and
+  a parser, if its markup differs from the existing ones).
+- Every source runs through the same pipeline: fetch its listing pages, scrape
+  the articles, and write a valid RSS 2.0 feed using
+  [feedgen](https://feedgen.kiesow.be/). Each item carries a title, link,
+  intro text, thumbnail and publication date where the source provides them.
+- Failures are contained. A page that won't load, an item that won't parse, or
+  a whole source that fails leaves the other sources untouched and still
+  produces a feed from whatever was collected — the run doesn't crash.
+  Articles seen more than once are de-duplicated by URL and the total per feed
+  is capped at `MAX_ITEMS`.
+- Runs are **incremental**. Before scraping, the previous feed file is read and
+  its newest entry is used as a stop marker: since both the listings and the
+  feeds run newest-first, reaching that entry means everything beyond it is
+  already published, so the remaining pages are skipped. A typical scheduled
+  run therefore fetches a single page. Entries from the previous feed are
+  carried forward and appended after the new ones, so the back catalogue is
+  preserved and a run that finds nothing new republishes the existing feed
+  unchanged rather than emptying it. If the marker isn't found (e.g. it aged
+  out of the listing), every page is scraped as a fallback.
+- When a feed's item set is unchanged, its previous `lastBuildDate` is reused
+  rather than restamped. That is the only time-varying field, so the file comes
+  out byte-identical and the workflow commits nothing — quiet runs leave no
+  commit behind. A fresh build date is written as soon as the items change.
 - `.github/workflows/rss.yml` runs the script every 2 hours (and on manual
-  `workflow_dispatch`), then commits `sportnet_feed.xml` back to the repo if it
-  changed.
+  `workflow_dispatch`), then commits any feed file that changed back to the
+  repo.
 
-**Note:** the exact selectors in `generate_feed.py` are best-effort generic
-heuristics. If sportnet.hr's markup doesn't match one of the patterns tried,
-inspect the live page's HTML and adjust the selectors in
-`_extract_from_container` / `parse_articles` accordingly.
+**Note:** the selectors in `generate_feed.py` are matched to each source's
+current markup, with generic fallbacks. If a source changes its markup, inspect
+the live page's HTML and adjust that source's parser accordingly.
 
 ## Local setup
 
@@ -49,9 +55,9 @@ pip install -r requirements.txt
 python generate_feed.py
 ```
 
-This writes/updates `sportnet_feed.xml` in the repo root.
+This writes/updates every configured feed file in the repo root.
 
-## Enabling the scheduled workflow + hosting the feed via GitHub Pages
+## Enabling the scheduled workflow + hosting the feeds via GitHub Pages
 
 1. **Make the repository public.** GitHub Pages on the free plan only serves
    public repositories. Go to **Settings → General → Danger Zone → Change
@@ -63,7 +69,8 @@ This writes/updates `sportnet_feed.xml` in the repo root.
 3. **Enable GitHub Pages.** Go to **Settings → Pages**, and under
    **Build and deployment → Source**, choose **Deploy from a branch**, then
    pick branch `main` and folder `/ (root)`. Save.
-4. Once Pages is enabled, the feed will be publicly available at:
+4. Once Pages is enabled, each feed is publicly available at:
+   `https://<your-username>.github.io/<repo-name>/<feed-file>` — for example
    `https://<your-username>.github.io/<repo-name>/sportnet_feed.xml`
 5. The workflow runs automatically every 2 hours, or you can trigger it
    manually from the **Actions** tab via **Run workflow**
@@ -71,6 +78,6 @@ This writes/updates `sportnet_feed.xml` in the repo root.
 
 ## Subscribing
 
-Point any RSS reader at your published `sportnet_feed.xml` URL
-(`https://<your-username>.github.io/<repo-name>/sportnet_feed.xml`) once GitHub Pages
+Point any RSS reader at a published feed URL
+(`https://<your-username>.github.io/<repo-name>/<feed-file>`) once GitHub Pages
 is live.

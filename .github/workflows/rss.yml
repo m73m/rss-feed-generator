@@ -23,17 +23,17 @@ jobs:
       - name: Install dependencies
         run: pip install -r requirements.txt
 
-      - name: Generate feed
+      - name: Generate feeds
         run: python generate_feed.py
 
-      - name: Commit and push sportnet_feed.xml if changed
+      - name: Commit and push feeds if changed
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-          git add sportnet_feed.xml
-          if ! git diff --cached --quiet -- sportnet_feed.xml; then
-            git commit -m "Update sportnet_feed.xml [skip ci]"
+          git add sportnet_feed.xml fsb_feed.xml
+          if ! git diff --cached --quiet; then
+            git commit -m "Update feeds [skip ci]"
             git push
           else
-            echo "No changes to sportnet_feed.xml"
+            echo "No changes to the feeds"
           fi
