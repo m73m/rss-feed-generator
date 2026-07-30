@@ -1,11 +1,11 @@
 #!/usr/bin/env python3
-"""Generate an RSS 2.0 feed (sportnet_feed.xml) from the latest headlines on sportnet.hr.
+"""Generate an RSS 2.0 feed (sportnet_feed.xml) from sportnet.hr's archive listing.
 
 The site's markup isn't guaranteed to follow a single fixed pattern, so this
 scraper tries several common article-listing shapes in order and falls back
-to a generic "headline link" heuristic. Any failure while fetching the page,
+to a generic "headline link" heuristic. Any failure while fetching a page,
 or while parsing an individual article, is caught and logged so one bad item
-(or a temporarily unreachable site) never stops the whole run — the feed is
+(or a temporarily unreachable page) never stops the whole run — the feed is
 still (re)written with whatever items were successfully collected.
 """
 
@@ -21,6 +21,8 @@ from bs4 import BeautifulSoup
 from feedgen.feed import FeedGenerator
 
 BASE_URL = "https://sportnet.hr"
+ARCHIVE_URL_TEMPLATE = "https://sportnet.hr/arhiva/?pg={page}"
+ARCHIVE_PAGES = range(1, 11)
 OUTPUT_PATH = "sportnet_feed.xml"
 MAX_ITEMS = 200
 REQUEST_TIMEOUT = 15
@@ -188,8 +190,38 @@ def parse_articles(html: str) -> list[dict]:
         seen_links.add(item["link"])
         articles.append(item)
 
+    return articles
+
+
+def fetch_all_articles() -> list[dict]:
+    """Fetch and parse every archive page, merging results with a global cap
+    and de-duplicating articles that show up on more than one page.
+    """
+    articles: list[dict] = []
+    seen_links: set[str] = set()
+
+    for page in ARCHIVE_PAGES:
         if len(articles) >= MAX_ITEMS:
             break
+
+        url = ARCHIVE_URL_TEMPLATE.format(page=page)
+        html = fetch_html(url)
+        if html is None:
+            continue
+
+        try:
+            page_articles = parse_articles(html)
+        except Exception as exc:  # noqa: BLE001 - one bad page must not stop the run
+            log.error("Failed to parse articles from %s: %s", url, exc)
+            continue
+
+        for article in page_articles:
+            if article["link"] in seen_links:
+                continue
+            seen_links.add(article["link"])
+            articles.append(article)
+            if len(articles) >= MAX_ITEMS:
+                break
 
     return articles
 
@@ -222,14 +254,11 @@ def build_feed(articles: list[dict]) -> FeedGenerator:
 
 
 def main() -> int:
-    html = fetch_html(BASE_URL)
-    articles: list[dict] = []
-
-    if html is not None:
-        try:
-            articles = parse_articles(html)
-        except Exception as exc:  # noqa: BLE001 - parsing must never crash the run
-            log.error("Failed to parse articles: %s", exc)
+    try:
+        articles = fetch_all_articles()
+    except Exception as exc:  # noqa: BLE001 - one bad page must never crash the whole run
+        log.error("Failed to fetch articles: %s", exc)
+        articles = []
 
     if not articles:
         log.warning("No articles found (fetch or parse failed) — writing an empty feed.")

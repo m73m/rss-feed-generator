@@ -5,15 +5,17 @@ on [sportnet.hr](https://sportnet.hr), on a schedule, via GitHub Actions.
 
 ## How it works
 
-- `generate_feed.py` fetches the sportnet.hr homepage, scrapes the latest
-  articles, and writes a valid RSS 2.0 feed to `sportnet_feed.xml` in the repo root
-  using [feedgen](https://feedgen.kiesow.be/).
+- `generate_feed.py` fetches sportnet.hr's archive listing
+  (`https://sportnet.hr/arhiva/?pg=N` for pages 1 through 10), scrapes the
+  articles found across those pages, and writes a valid RSS 2.0 feed to
+  `sportnet_feed.xml` in the repo root using [feedgen](https://feedgen.kiesow.be/).
 - The scraper tries a few common article-listing patterns (`<article>` tags,
   common "post/news-item/card" class names, then a generic headline-link
   fallback) since it isn't tied to one exact markup shape. Any failure —
-  the whole page not loading, or a single article failing to parse — is
-  caught and logged so the run always finishes and writes a feed (even an
-  empty one) instead of crashing.
+  a single archive page not loading, or a single article failing to parse —
+  is caught and logged so the run always finishes and writes a feed (even an
+  empty one) instead of crashing. Articles that appear on more than one page
+  are de-duplicated by URL, and the total is capped at `MAX_ITEMS`.
 - `.github/workflows/rss.yml` runs the script every hour (and on manual
   `workflow_dispatch`), then commits `sportnet_feed.xml` back to the repo if it
   changed.
