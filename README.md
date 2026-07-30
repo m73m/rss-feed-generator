@@ -20,7 +20,7 @@ on [sportnet.hr](https://sportnet.hr), on a schedule, via GitHub Actions.
   is read and its newest entry is used as a stop marker: since both the
   archive and the feed run newest-first, reaching that entry means everything
   beyond it is already published, so the remaining pages are skipped. A
-  typical hourly run therefore fetches only page 1 instead of all ten.
+  typical scheduled run therefore fetches only page 1 instead of all ten.
   Entries from the previous feed are carried forward and appended after the
   new ones, so the back catalogue is preserved and a run that finds nothing
   new republishes the existing feed unchanged rather than emptying it. If the
@@ -31,7 +31,7 @@ on [sportnet.hr](https://sportnet.hr), on a schedule, via GitHub Actions.
   file comes out byte-identical and the workflow commits nothing — quiet
   hours leave no commit behind. A fresh build date is written as soon as the
   items actually change.
-- `.github/workflows/rss.yml` runs the script every hour (and on manual
+- `.github/workflows/rss.yml` runs the script every 2 hours (and on manual
   `workflow_dispatch`), then commits `sportnet_feed.xml` back to the repo if it
   changed.
 
@@ -65,7 +65,7 @@ This writes/updates `sportnet_feed.xml` in the repo root.
    pick branch `main` and folder `/ (root)`. Save.
 4. Once Pages is enabled, the feed will be publicly available at:
    `https://<your-username>.github.io/<repo-name>/sportnet_feed.xml`
-5. The workflow runs automatically every hour, or you can trigger it
+5. The workflow runs automatically every 2 hours, or you can trigger it
    manually from the **Actions** tab via **Run workflow**
    (`workflow_dispatch`).
 
