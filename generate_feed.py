@@ -22,7 +22,7 @@ from feedgen.feed import FeedGenerator
 
 BASE_URL = "https://sportnet.hr"
 OUTPUT_PATH = "sportnet_feed.xml"
-MAX_ITEMS = 30
+MAX_ITEMS = 200
 REQUEST_TIMEOUT = 15
 USER_AGENT = (
     "Mozilla/5.0 (compatible; SportnetRSSBot/1.0; "
