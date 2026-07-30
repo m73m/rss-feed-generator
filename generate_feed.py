@@ -168,10 +168,22 @@ def parse_articles(html: str) -> list[dict]:
     articles: list[dict] = []
     seen_links: set[str] = set()
 
-    # Strategy 1: semantic <article> containers.
-    containers = soup.find_all("article")
+    # Strategy 1: sportnet.hr's real listing shape — a bare, unclassed <li>
+    # wrapping a div.img thumbnail and/or a div.uvod intro alongside the
+    # title link. This has to come first since these <li> elements have no
+    # class of their own, so the later class-name and <article> strategies
+    # never see them and would otherwise fall all the way back to bare
+    # heading tags, which are too narrow to include the img/uvod siblings.
+    containers = [
+        li for li in soup.find_all("li")
+        if li.find("div", class_="img") is not None or li.find("div", class_="uvod") is not None
+    ]
 
-    # Strategy 2: common CMS class-name conventions.
+    # Strategy 2: semantic <article> containers.
+    if not containers:
+        containers = soup.find_all("article")
+
+    # Strategy 3: common CMS class-name conventions.
     if not containers:
         containers = soup.find_all(
             ["div", "li"],
@@ -180,7 +192,7 @@ def parse_articles(html: str) -> list[dict]:
             ),
         )
 
-    # Strategy 3: generic heuristic — headline tags that wrap or contain a link.
+    # Strategy 4: generic heuristic — headline tags that wrap or contain a link.
     if not containers:
         containers = soup.find_all(["h1", "h2", "h3"])
 
