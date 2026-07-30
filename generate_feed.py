@@ -262,19 +262,21 @@ def parse_articles(html: str) -> list[dict]:
     return articles
 
 
-def load_previous_items(path: str) -> list[dict]:
+def load_previous_feed(path: str) -> tuple[list[dict], str | None]:
     """Read the feed written by the previous run.
 
-    Its newest entry is the marker scraping stops at, and all of its entries
-    are carried forward into the new feed so the back catalogue survives.
-    Returns an empty list on the first run, or if the file is
-    missing/unparseable, in which case every page gets scraped.
+    Returns its entries plus its lastBuildDate. The newest entry is the
+    marker scraping stops at, all entries are carried forward so the back
+    catalogue survives, and the build date is reused when nothing changed so
+    the file stays byte-identical and produces no commit. Returns ([], None)
+    on the first run or an unreadable file, in which case every page gets
+    scraped.
     """
     try:
         root = ElementTree.parse(path).getroot()
     except (OSError, ElementTree.ParseError) as exc:
         log.info("No usable previous feed at %s (%s) — scraping every page.", path, exc)
-        return []
+        return [], None
 
     items: list[dict] = []
     for item in root.iterfind("./channel/item"):
@@ -293,7 +295,7 @@ def load_previous_items(path: str) -> list[dict]:
         })
 
     log.info("Loaded %d item(s) from the previous feed.", len(items))
-    return items
+    return items, root.findtext("./channel/lastBuildDate")
 
 
 def fetch_all_articles(stop_link: str | None = None) -> list[dict]:
@@ -343,14 +345,16 @@ def fetch_all_articles(stop_link: str | None = None) -> list[dict]:
     return articles
 
 
-def build_feed(articles: list[dict]) -> FeedGenerator:
+def build_feed(articles: list[dict], last_build_date: str | None = None) -> FeedGenerator:
     fg = FeedGenerator()
     fg.id(BASE_URL)
     fg.title("Sportnet.hr - Latest News")
     fg.link(href=BASE_URL, rel="alternate")
     fg.description("Automatically generated RSS feed of the latest headlines from sportnet.hr")
     fg.language("hr")
-    fg.lastBuildDate(datetime.now(timezone.utc))
+    # Reusing the previous build date when the items are unchanged keeps the
+    # output byte-identical, so the workflow has nothing to commit.
+    fg.lastBuildDate(last_build_date or datetime.now(timezone.utc))
 
     for article in articles:
         # feedgen prepends by default, which would reverse our newest-first
@@ -373,7 +377,7 @@ def build_feed(articles: list[dict]) -> FeedGenerator:
 
 
 def main() -> int:
-    previous = load_previous_items(OUTPUT_PATH)
+    previous, previous_build_date = load_previous_feed(OUTPUT_PATH)
 
     # Only the previous feed's newest item is used as the stopping marker.
     stop_link = previous[0]["link"] if previous else None
@@ -399,8 +403,14 @@ def main() -> int:
     if not articles:
         log.warning("No articles found (fetch or parse failed) — writing an empty feed.")
 
+    # Only stamp a fresh build date when the item set actually moved; an
+    # unchanged feed is rewritten exactly as it was so git sees no diff.
+    unchanged = [a["link"] for a in articles] == [p["link"] for p in previous]
+    if unchanged and previous_build_date:
+        log.info("Items unchanged — keeping the previous build date, no commit expected.")
+
     try:
-        feed = build_feed(articles)
+        feed = build_feed(articles, previous_build_date if unchanged else None)
         feed.rss_file(OUTPUT_PATH)
         log.info("Wrote %d item(s) to %s", len(articles), OUTPUT_PATH)
     except Exception as exc:  # noqa: BLE001

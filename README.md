@@ -26,6 +26,11 @@ on [sportnet.hr](https://sportnet.hr), on a schedule, via GitHub Actions.
   new republishes the existing feed unchanged rather than emptying it. If the
   marker isn't found (e.g. it aged out of the archive), every page is scraped
   as before.
+- When the item set is unchanged, the previous `lastBuildDate` is reused
+  rather than restamped. That is the feed's only time-varying field, so the
+  file comes out byte-identical and the workflow commits nothing — quiet
+  hours leave no commit behind. A fresh build date is written as soon as the
+  items actually change.
 - `.github/workflows/rss.yml` runs the script every hour (and on manual
   `workflow_dispatch`), then commits `sportnet_feed.xml` back to the repo if it
   changed.
