@@ -17,11 +17,12 @@ import argparse
 import logging
 import re
 import sys
+import unicodedata
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from html import escape
 from typing import Callable
-from urllib.parse import urljoin, urlparse
+from urllib.parse import unquote, urljoin, urlparse, urlsplit, urlunsplit
 from xml.etree import ElementTree
 
 import requests
@@ -404,6 +405,43 @@ def _split_product_title(text: str | None) -> tuple[str | None, str | None]:
     return name or None, rest or None
 
 
+def _ascii_image_filename(url: str) -> str:
+    """Rewrite this source's image URL to end in a plain-ASCII filename.
+
+    These URLs identify the asset by their UUID path segment; the filename
+    after it is a human-readable slug the CDN ignores — the same URL serves
+    the same image with the slug replaced. The slug is built from the
+    product's display name, so it can carry accented letters, an en dash and
+    a non-breaking space, percent-encoded into the path. Readers that
+    normalise URLs before fetching tend to mangle or drop a %C2%A0, leaving
+    the image broken, which is why images loaded from other sources but not
+    this one.
+
+    Only applied to this source, where the slug is known to be cosmetic. On
+    a source that serves images from real file paths, rewriting the filename
+    would simply 404.
+    """
+    parts = urlsplit(url)
+    head, _, filename = parts.path.rpartition("/")
+    if not filename:
+        return url
+
+    name, dot, ext = unquote(filename).rpartition(".")
+    if not dot:  # no extension — treat the whole segment as the name
+        name, ext = unquote(filename), ""
+
+    # NFKD turns accented letters into base letter + combining mark (and a
+    # non-breaking space into a plain one); dropping non-ASCII then leaves
+    # the readable stem behind rather than deleting the whole word.
+    ascii_name = unicodedata.normalize("NFKD", name).encode("ascii", "ignore").decode()
+    ascii_name = re.sub(r"[^A-Za-z0-9._-]+", "-", ascii_name)
+    ascii_name = re.sub(r"-{2,}", "-", ascii_name).strip("-.") or "image"
+
+    ext = re.sub(r"[^A-Za-z0-9]+", "", ext).lower()
+    rebuilt = f"{head}/{ascii_name}" + (f".{ext}" if ext else "")
+    return urlunsplit((parts.scheme, parts.netloc, rebuilt, parts.query, parts.fragment))
+
+
 def _extract_product_card(link_tag, base_url: str) -> dict | None:
     """Pull title/link/image out of one product card anchor.
 
@@ -439,7 +477,7 @@ def _extract_product_card(link_tag, base_url: str) -> dict | None:
         if srcset:
             image_url = srcset.split(",")[0].strip().split(" ")[0]
     if image_url:
-        image_url = urljoin(base_url, image_url)
+        image_url = _ascii_image_filename(urljoin(base_url, image_url))
 
     return {
         "title": title,
