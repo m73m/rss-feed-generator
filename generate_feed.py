@@ -350,8 +350,10 @@ def parse_vijesti(html: str, base_url: str) -> list[dict]:
 # Source: product grid with <a data-qa="product-card-link"> cards
 # --------------------------------------------------------------------------
 
+# The separator before the label is optional: most cards use an en-dash, but
+# some carry the label with only whitespace in front of it.
 LAUNCH_LABEL_RE = re.compile(
-    r"\s*[–—-]\s*(?:erscheinungsdatum|release date|launch date)\s*$",
+    r"\s*(?:[–—-]\s*)?(?:erscheinungsdatum|release date|launch date)\s*$",
     re.IGNORECASE,
 )
 
