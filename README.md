@@ -39,10 +39,17 @@ Each source writes its own feed file in the repo root:
   rather than restamped. That is the only time-varying field, so the file comes
   out byte-identical and the workflow commits nothing — quiet runs leave no
   commit behind. A fresh build date is written as soon as the items change.
-- `.github/workflows/rss.yml` runs the script every 2 hours (and on manual
-  `workflow_dispatch`), then commits any feed file that changed back to the
-  repo. The cron fires at `:23` rather than `:00` on purpose — GitHub delays
-  and sometimes drops scheduled runs at the top of the hour, when load peaks.
+- `.github/workflows/rss.yml` runs the script on two schedules and commits
+  any feed file that changed back to the repo. The news sources run every 2
+  hours; the product source runs twice a day, at 07:23 and 19:23 CET. Both
+  fire at `:23` rather than `:00` on purpose — GitHub delays and sometimes
+  drops scheduled runs at the top of the hour, when load peaks. A manual
+  `workflow_dispatch` always runs every source.
+- Which sources run is chosen with `--only NAME...` / `--exclude NAME...`;
+  with neither, every source runs. An unrecognised name is a hard error, so
+  a typo can't silently leave a feed unwritten. Cron is UTC-only and cannot
+  follow DST, so a schedule pinned to CET lands an hour later in local time
+  while Central Europe is on CEST.
 
 **Scheduling caveat:** `schedule` triggers are best-effort on GitHub's side, so
 individual runs can be late by anything from minutes to hours, or skipped

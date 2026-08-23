@@ -2,13 +2,26 @@ name: Generate RSS feed
 
 on:
   schedule:
-    # Deliberately off the hour boundary: GitHub delays or silently drops
-    # scheduled runs during high-load periods, and :00 is the busiest minute.
+    # News sources, every 2 hours. Deliberately off the hour boundary:
+    # GitHub delays or silently drops scheduled runs during high-load
+    # periods, and :00 is the busiest minute.
     - cron: "23 */2 * * *"
+    # Product source, twice a day at 06:23 and 18:23 UTC — 07:23 and 19:23
+    # CET. Cron is UTC-only and cannot follow DST, so while Central Europe
+    # is on CEST these land an hour later in local time (08:23 / 20:23).
+    - cron: "23 6,18 * * *"
   workflow_dispatch: {}
 
 permissions:
   contents: write
+
+# The two schedules both fire at 06:23 and 18:23, and GitHub starts a
+# separate run per matching cron entry. Without this, those two runs would
+# race to push and one would be rejected as non-fast-forward; queueing them
+# means the second checks out the first's commit.
+concurrency:
+  group: feeds
+  cancel-in-progress: false
 
 jobs:
   generate:
@@ -25,8 +38,19 @@ jobs:
       - name: Install dependencies
         run: pip install -r requirements.txt
 
+      - name: Select sources for this trigger
+        id: select
+        run: |
+          case "${{ github.event.schedule }}" in
+            "23 6,18 * * *") args="--only nike" ;;
+            "23 */2 * * *")  args="--exclude nike" ;;
+            *)               args="" ;;  # manual dispatch: every source
+          esac
+          echo "args=$args" >> "$GITHUB_OUTPUT"
+          echo "Running with: ${args:-<all sources>}"
+
       - name: Generate feeds
-        run: python generate_feed.py
+        run: python generate_feed.py ${{ steps.select.outputs.args }}
 
       - name: Commit and push feeds if changed
         run: |
@@ -35,9 +59,11 @@ jobs:
           # Glob rather than a fixed list so adding a source to SOURCES needs
           # no workflow change for its feed to be committed.
           git add ./*_feed.xml
-          if ! git diff --cached --quiet; then
-            git commit -m "Update feeds [skip ci]"
-            git push
-          else
+          if git diff --cached --quiet; then
             echo "No changes to the feeds"
+            exit 0
           fi
+          git commit -m "Update feeds [skip ci]"
+          # Belt and braces behind the concurrency group: if main moved
+          # anyway, replay this commit on top rather than failing the run.
+          git push || { git pull --rebase && git push; }

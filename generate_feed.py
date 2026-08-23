@@ -13,6 +13,7 @@ still produces a feed from whatever was collected.
 
 from __future__ import annotations
 
+import argparse
 import logging
 import re
 import sys
@@ -704,9 +705,47 @@ def generate(source: Source) -> bool:
     return True
 
 
-def main() -> int:
+def select_sources(only: list[str] | None, exclude: list[str] | None) -> list[Source]:
+    """Resolve which sources to run.
+
+    Unknown names are a hard error rather than a no-op: a typo in the
+    workflow would otherwise quietly stop a feed from ever updating again,
+    which is invisible until someone notices the feed has gone stale.
+    """
+    known = {source.name for source in SOURCES}
+    unknown = sorted((set(only or ()) | set(exclude or ())) - known)
+    if unknown:
+        raise SystemExit(
+            f"Unknown source(s): {', '.join(unknown)}. "
+            f"Known sources: {', '.join(sorted(known))}."
+        )
+
+    chosen = [s for s in SOURCES if not only or s.name in only]
+    return [s for s in chosen if s.name not in (exclude or ())]
+
+
+def main(argv: list[str] | None = None) -> int:
+    parser = argparse.ArgumentParser(
+        description="Generate an RSS feed for each configured source.",
+    )
+    parser.add_argument(
+        "--only", nargs="+", metavar="NAME",
+        help="run only these sources (default: all of them)",
+    )
+    parser.add_argument(
+        "--exclude", nargs="+", metavar="NAME",
+        help="run every source except these",
+    )
+    args = parser.parse_args(argv)
+
+    sources = select_sources(args.only, args.exclude)
+    if not sources:
+        log.warning("Every source was filtered out — nothing to do.")
+        return 0
+
+    log.info("Running source(s): %s", ", ".join(s.name for s in sources))
     # One source failing must not stop the others from being regenerated.
-    results = [generate(source) for source in SOURCES]
+    results = [generate(source) for source in sources]
     return 0 if all(results) else 1
 
 
