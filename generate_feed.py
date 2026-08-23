@@ -346,6 +346,87 @@ def parse_vijesti(html: str, base_url: str) -> list[dict]:
     return _collect(containers, base_url, _extract_vijest_item)
 
 
+# --------------------------------------------------------------------------
+# Source: product grid with <a data-qa="product-card-link"> cards
+# --------------------------------------------------------------------------
+
+LAUNCH_LABEL_RE = re.compile(
+    r"\s*[–—-]\s*(?:erscheinungsdatum|release date|launch date)\s*$",
+    re.IGNORECASE,
+)
+
+
+def _clean_product_title(text: str | None) -> str | None:
+    """Normalise a product card's alt text into a title.
+
+    The alt ends in a "– Erscheinungsdatum" label separated by a non-breaking
+    space; that's card chrome rather than part of the product name, so the
+    whitespace is collapsed and the trailing label dropped.
+    """
+    if not text:
+        return None
+    normalized = " ".join(text.replace("\xa0", " ").split())
+    normalized = LAUNCH_LABEL_RE.sub("", normalized).strip()
+    return normalized or None
+
+
+def _extract_product_card(link_tag, base_url: str) -> dict | None:
+    """Pull title/link/image out of one product card anchor.
+
+    The card's visible title, price and release date are rendered
+    client-side: in the served HTML they are still empty
+    <div class="nds-skeleton"> placeholders. The product image's alt text is
+    the only place the name actually appears, so the title is taken from
+    there and neither a summary nor a date is available.
+    """
+    href = link_tag.get("href")
+    if not href:
+        return None
+
+    # Product detail pages live under /t/<slug>; nav and category links don't.
+    if "/t/" not in urlparse(urljoin(base_url, href)).path:
+        return None
+
+    img_tag = link_tag.find("img")
+    title = _clean_product_title(img_tag.get("alt") if img_tag is not None else None)
+    if not title:
+        return None
+
+    image_url = None
+    if img_tag is not None:
+        image_url = img_tag.get("src") or img_tag.get("data-src")
+    if not image_url:
+        # Fallback to the <picture> sources; each srcset entry is
+        # "<url> <descriptor>", so the URL is the first whitespace-run.
+        source_tag = link_tag.find("source")
+        srcset = source_tag.get("srcset") if source_tag is not None else None
+        if srcset:
+            image_url = srcset.split(",")[0].strip().split(" ")[0]
+    if image_url:
+        image_url = urljoin(base_url, image_url)
+
+    return {
+        "title": title,
+        "link": urljoin(base_url, href),
+        "summary": None,
+        "image": image_url,
+        "published": None,
+    }
+
+
+def parse_product_cards(html: str, base_url: str) -> list[dict]:
+    soup = BeautifulSoup(html, "lxml")
+
+    # Anchored on the data-qa hook rather than the card's class names: those
+    # are generated style hashes (css-1lu53xk, e4lt99o0, emoknll3) that change
+    # on every front-end build, whereas the QA hook is stable.
+    cards = soup.select('a[data-qa="product-card-link"][href]')
+    if not cards:
+        cards = soup.select("a.product-card-link[href]")
+
+    return _collect(cards, base_url, _extract_product_card)
+
+
 def _collect(containers, base_url: str, extract) -> list[dict]:
     """Run an extractor over candidate containers, skipping anything that
     fails to parse and de-duplicating by link.
@@ -403,6 +484,16 @@ SOURCES: tuple[Source, ...] = (
         feed_title="FSB - Novosti",
         feed_description="Automatically generated RSS feed of the latest news from fsb.unizg.hr",
         parse=parse_vijesti,
+    ),
+    Source(
+        name="nike",
+        base_url="https://www.nike.com/de/launch/in-stock",
+        page_urls=("https://www.nike.com/de/launch/in-stock",),
+        output_path="nike_feed.xml",
+        feed_title="Nike Launch - In Stock",
+        feed_description="Automatically generated RSS feed of in-stock launch products from nike.com",
+        parse=parse_product_cards,
+        language="de",
     ),
 )
 

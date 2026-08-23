@@ -9,6 +9,7 @@ Each source writes its own feed file in the repo root:
 | --- |
 | `sportnet_feed.xml` |
 | `fsb_feed.xml` |
+| `nike_feed.xml` |
 
 ## How it works
 
@@ -52,7 +53,11 @@ branch, and changing the default branch re-registers it.
 
 **Note:** the selectors in `generate_feed.py` are matched to each source's
 current markup, with generic fallbacks. If a source changes its markup, inspect
-the live page's HTML and adjust that source's parser accordingly.
+the live page's HTML — the raw served HTML, via view-source, not the
+post-JavaScript DOM shown by the inspector — and adjust that source's parser
+accordingly. Where a source renders part of a listing client-side, only the
+fields present in the served HTML can be extracted, so some feeds carry a
+title, link and image but no summary or publication date.
 
 ## Local setup
 

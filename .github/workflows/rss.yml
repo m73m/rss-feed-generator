@@ -32,7 +32,9 @@ jobs:
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-          git add sportnet_feed.xml fsb_feed.xml
+          # Glob rather than a fixed list so adding a source to SOURCES needs
+          # no workflow change for its feed to be committed.
+          git add ./*_feed.xml
           if ! git diff --cached --quiet; then
             git commit -m "Update feeds [skip ci]"
             git push
