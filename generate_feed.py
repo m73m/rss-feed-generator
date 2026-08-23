@@ -405,8 +405,9 @@ def _split_product_title(text: str | None) -> tuple[str | None, str | None]:
     return name or None, rest or None
 
 
-def _ascii_image_filename(url: str) -> str:
-    """Rewrite this source's image URL to end in a plain-ASCII filename.
+def _normalize_image_url(url: str) -> str:
+    """Rewrite this source's image URL into the plainest form that still
+    resolves: no CDN transform segment, and a plain-ASCII filename.
 
     These URLs identify the asset by their UUID path segment; the filename
     after it is a human-readable slug the CDN ignores — the same URL serves
@@ -417,12 +418,19 @@ def _ascii_image_filename(url: str) -> str:
     the image broken, which is why images loaded from other sources but not
     this one.
 
-    Only applied to this source, where the slug is known to be cosmetic. On
-    a source that serves images from real file paths, rewriting the filename
-    would simply 404.
+    The CDN transform segment ("w_960,c_limit,q_auto,f_auto") is dropped for
+    the same reason: it is the only part of the path carrying commas, and
+    the working source's image URLs are a plain comma-free path. Confirmed
+    the image still resolves without it.
+
+    Only applied to this source, where the transform segment and slug are
+    both known to be optional. On a source that serves images from real file
+    paths, rewriting the path would simply 404.
     """
     parts = urlsplit(url)
-    head, _, filename = parts.path.rpartition("/")
+    # Transform segments are the only ones carrying commas.
+    path = "/".join(seg for seg in parts.path.split("/") if "," not in seg)
+    head, _, filename = path.rpartition("/")
     if not filename:
         return url
 
@@ -477,7 +485,7 @@ def _extract_product_card(link_tag, base_url: str) -> dict | None:
         if srcset:
             image_url = srcset.split(",")[0].strip().split(" ")[0]
     if image_url:
-        image_url = _ascii_image_filename(urljoin(base_url, image_url))
+        image_url = _normalize_image_url(urljoin(base_url, image_url))
 
     return {
         "title": title,
@@ -732,7 +740,12 @@ def build_feed(
             # fetching each image, which would mean an extra request per
             # item; readers that need a real size read media:content anyway.
             fe.enclosure(image, 0, mime)
-            fe.media.content(url=image, medium="image", type=mime)
+            # group=None keeps these as direct children of <item> instead of
+            # nesting them in <media:group>, which is the shape readers look
+            # for. media:thumbnail is what list/card views read to show a
+            # preview, separately from whatever the article body renders.
+            fe.media.content(url=image, medium="image", type=mime, group=None)
+            fe.media.thumbnail(url=image, group=None)
         if article.get("published"):
             try:
                 fe.pubDate(article["published"])
