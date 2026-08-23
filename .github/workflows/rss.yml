@@ -2,13 +2,13 @@ name: Generate RSS feed
 
 on:
   schedule:
-    # News sources, every 2 hours. Deliberately off the hour boundary:
-    # GitHub delays or silently drops scheduled runs during high-load
-    # periods, and :00 is the busiest minute.
+    # Frequently-updated sources, every 2 hours. Deliberately off the hour
+    # boundary: GitHub delays or silently drops scheduled runs during
+    # high-load periods, and :00 is the busiest minute.
     - cron: "23 */2 * * *"
-    # Product source, twice a day at 06:23 and 18:23 UTC — 07:23 and 19:23
-    # CET. Cron is UTC-only and cannot follow DST, so while Central Europe
-    # is on CEST these land an hour later in local time (08:23 / 20:23).
+    # Slower-moving sources, twice a day at 06:23 and 18:23 UTC — 07:23 and
+    # 19:23 CET. Cron is UTC-only and cannot follow DST, so while Central
+    # Europe is on CEST these land an hour later locally (08:23 / 20:23).
     - cron: "23 6,18 * * *"
   workflow_dispatch: {}
 
@@ -42,8 +42,8 @@ jobs:
         id: select
         run: |
           case "${{ github.event.schedule }}" in
-            "23 6,18 * * *") args="--only nike" ;;
-            "23 */2 * * *")  args="--exclude nike" ;;
+            "23 6,18 * * *") args="--only nike fsb" ;;
+            "23 */2 * * *")  args="--exclude nike fsb" ;;
             *)               args="" ;;  # manual dispatch: every source
           esac
           echo "args=$args" >> "$GITHUB_OUTPUT"
