@@ -29,6 +29,10 @@ Each source writes its own feed file in the repo root:
   the description so that carrying an item forward stays idempotent; the
   description is what gets read back, and building HTML into it would
   re-wrap the same entry on every run.
+- Where a source publishes no date, an item is stamped with the time it was
+  first seen rather than left without one, since readers sort and render
+  dateless items poorly. Only newly scraped items are stamped; carried-over
+  items keep the date already stored, so an item's date never moves.
 - Failures are contained. A page that won't load, an item that won't parse, or
   a whole source that fails leaves the other sources untouched and still
   produces a feed from whatever was collected — the run doesn't crash.

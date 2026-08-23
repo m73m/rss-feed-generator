@@ -771,6 +771,16 @@ def generate(source: Source) -> bool:
         log.error("Failed to fetch articles for %s: %s", source.name, exc)
         new_articles = []
 
+    # Sources that publish no date leave items with no pubDate at all, which
+    # readers handle poorly — they cannot sort them, and some skip rendering
+    # parts of a dateless item. Fall back to when the item was first seen.
+    # Only newly scraped items are stamped; carried-over ones keep the date
+    # already stored for them, so an item's date never moves once set.
+    first_seen = datetime.now(timezone.utc)
+    for article in new_articles:
+        if not article.get("published"):
+            article["published"] = first_seen
+
     # Newly scraped items are the most recent, so they lead; the previous
     # feed's entries follow to preserve history. Without carrying them over,
     # a run that found nothing new would publish an empty feed.
