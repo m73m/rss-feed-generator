@@ -21,6 +21,14 @@ Each source writes its own feed file in the repo root:
   the articles, and write a valid RSS 2.0 feed using
   [feedgen](https://feedgen.kiesow.be/). Each item carries a title, link,
   intro text, thumbnail and publication date where the source provides them.
+- An item's image is advertised three ways, because readers disagree on
+  where to look for one: an `<img>` inside `content:encoded`, a
+  `media:content` entry, and an `<enclosure>`. An enclosure on its own is
+  not enough — many readers treat enclosures as podcast attachments and
+  ignore them for images. The markup lives in `content:encoded` rather than
+  the description so that carrying an item forward stays idempotent; the
+  description is what gets read back, and building HTML into it would
+  re-wrap the same entry on every run.
 - Failures are contained. A page that won't load, an item that won't parse, or
   a whole source that fails leaves the other sources untouched and still
   produces a feed from whatever was collected — the run doesn't crash.

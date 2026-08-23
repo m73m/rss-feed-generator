@@ -19,6 +19,7 @@ import re
 import sys
 from dataclasses import dataclass
 from datetime import datetime, timezone
+from html import escape
 from typing import Callable
 from urllib.parse import urljoin, urlparse
 from xml.etree import ElementTree
@@ -622,12 +623,32 @@ def fetch_all_articles(source: Source, stop_link: str | None = None) -> list[dic
     return articles
 
 
+IMAGE_MIME_BY_EXT = {
+    ".png": "image/png",
+    ".gif": "image/gif",
+    ".webp": "image/webp",
+    ".avif": "image/avif",
+}
+
+
+def _image_mime(url: str) -> str:
+    """Guess an image's MIME type from its URL, defaulting to JPEG."""
+    path = urlparse(url).path.lower()
+    for ext, mime in IMAGE_MIME_BY_EXT.items():
+        if path.endswith(ext):
+            return mime
+    return "image/jpeg"
+
+
 def build_feed(
     source: Source,
     articles: list[dict],
     last_build_date: str | None = None,
 ) -> FeedGenerator:
     fg = FeedGenerator()
+    # Adds the Media RSS namespace, so each item can advertise its image in
+    # the form the big aggregators actually read.
+    fg.load_extension("media")
     fg.id(source.base_url)
     fg.title(source.feed_title)
     fg.link(href=source.base_url, rel="alternate")
@@ -644,10 +665,36 @@ def build_feed(
         fe.id(article["link"])
         fe.title(article["title"])
         fe.link(href=article["link"])
-        if article.get("summary"):
-            fe.description(article["summary"])
-        if article.get("image"):
-            fe.enclosure(article["image"], 0, "image/jpeg")
+        summary = article.get("summary")
+        image = article.get("image")
+
+        if summary:
+            fe.description(summary)
+
+        if image:
+            mime = _image_mime(image)
+            # Readers disagree on where an item's image lives, so advertise
+            # it three ways: an <img> in content:encoded, which is the one
+            # almost all of them render; media:content, which the large
+            # aggregators read; and the enclosure, for those that only look
+            # there. An enclosure alone — how this used to work — is widely
+            # treated as a podcast attachment and skipped for images.
+            #
+            # The markup goes in content:encoded rather than the description
+            # on purpose: the description is what load_previous_feed reads
+            # back, so building HTML into it would re-wrap the same entry
+            # again on every carry-forward.
+            body = f'<img src="{escape(image, quote=True)}"'
+            body += f' alt="{escape(article["title"], quote=True)}"/>'
+            if summary:
+                body += f"<p>{escape(summary)}</p>"
+            fe.content(body, type="CDATA")
+
+            # length is required by the RSS spec but only knowable by
+            # fetching each image, which would mean an extra request per
+            # item; readers that need a real size read media:content anyway.
+            fe.enclosure(image, 0, mime)
+            fe.media.content(url=image, medium="image", type=mime)
         if article.get("published"):
             try:
                 fe.pubDate(article["published"])
