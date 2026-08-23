@@ -372,6 +372,36 @@ def _clean_product_title(text: str | None) -> str | None:
     return normalized or None
 
 
+# Card names run: <model> "<colourway>" ['<variant>'] [suffix] (<style code>).
+# The double-quoted colourway closes the product name proper; anything after
+# it is secondary detail. Non-greedy so the split lands on the first quoted
+# run rather than swallowing a later one.
+PRODUCT_NAME_RE = re.compile(r'^(?P<name>.*?"[^"]*")\s*(?P<rest>.*)$', re.DOTALL)
+# Only paired single quotes are unwrapped, so an apostrophe inside a word
+# (e.g. "Women's") is left alone.
+QUOTED_VARIANT_RE = re.compile(r"'([^']*)'")
+
+
+def _split_product_title(text: str | None) -> tuple[str | None, str | None]:
+    """Split a cleaned card name into a title and a subtitle.
+
+    'Air Jordan 3 "Laser" \'Phantom and Sail\' (JA1369-001)' splits into
+    ('Air Jordan 3 "Laser"', 'Phantom and Sail (JA1369-001)'). A name with
+    nothing after the quoted colourway keeps the whole string as its title
+    and gets no subtitle; one with no quoted colourway at all is left whole.
+    """
+    if not text:
+        return None, None
+
+    match = PRODUCT_NAME_RE.match(text)
+    if match is None:
+        return text, None
+
+    name = match.group("name").strip()
+    rest = QUOTED_VARIANT_RE.sub(r"\1", match.group("rest")).strip()
+    return name or None, rest or None
+
+
 def _extract_product_card(link_tag, base_url: str) -> dict | None:
     """Pull title/link/image out of one product card anchor.
 
@@ -390,7 +420,9 @@ def _extract_product_card(link_tag, base_url: str) -> dict | None:
         return None
 
     img_tag = link_tag.find("img")
-    title = _clean_product_title(img_tag.get("alt") if img_tag is not None else None)
+    title, subtitle = _split_product_title(
+        _clean_product_title(img_tag.get("alt") if img_tag is not None else None)
+    )
     if not title:
         return None
 
@@ -410,7 +442,10 @@ def _extract_product_card(link_tag, base_url: str) -> dict | None:
     return {
         "title": title,
         "link": urljoin(base_url, href),
-        "summary": None,
+        # RSS 2.0 has no item-level subtitle, so the secondary half of the
+        # name goes in the description, which is what readers render beneath
+        # the title and is otherwise unused for this source.
+        "summary": subtitle,
         "image": image_url,
         "published": None,
     }
