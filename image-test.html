@@ -1,0 +1,78 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>Feed image diagnostic</title>
+<style>
+  body { font: 15px/1.5 system-ui, sans-serif; margin: 2rem auto; max-width: 46rem; padding: 0 1rem; }
+  .case { border: 1px solid #ccc; border-radius: 8px; padding: 1rem; margin: 1rem 0; }
+  .verdict { font-weight: 700; }
+  .pass { color: #12703a; }
+  .fail { color: #b3261e; }
+  .pending { color: #7a5c00; }
+  img { max-width: 220px; display: block; margin-top: .75rem; border-radius: 4px; }
+  code { background: #f3f3f3; padding: .1rem .3rem; border-radius: 3px; word-break: break-all; }
+  h1 { font-size: 1.25rem; }
+</style>
+
+<h1>Feed image diagnostic</h1>
+<p>Each test loads one image straight from its host, cross-origin, the same way
+a web-based feed reader does. Wait a few seconds, then report the verdicts.</p>
+
+<div id="out"></div>
+
+<script>
+const CASES = [
+  {
+    name: "1. Control — other source's host",
+    note: "Known-good. If this fails, the problem is your network, not the feed.",
+    url: "https://sportnet.hr/photos/_resized/528/87/0000000000528875_800_480_cut.jpg",
+  },
+  {
+    name: "2. Product image, current feed URL",
+    note: "Exactly what the feed serves today: ASCII filename, commas in the path.",
+    url: "https://static.nike.com/a/images/t_prod_pc/w_960,c_limit,q_auto,f_auto/3c4c64d0-826b-4303-a7be-37d46144c79a/air-max-dolce-light-magenta-fur-damen-ib4527-500-erscheinungsdatum.jpg",
+  },
+  {
+    name: "3. Same image, no transform parameters",
+    note: "Drops the comma-separated segment. If 2 fails but this passes, the commas are the problem.",
+    url: "https://static.nike.com/a/images/t_prod_pc/3c4c64d0-826b-4303-a7be-37d46144c79a/air-max-dolce.jpg",
+  },
+  {
+    name: "4. Same image, through a public image proxy",
+    note: "If 2 fails but this passes, the host is refusing hotlinked requests and proxying is the fix.",
+    url: "https://wsrv.nl/?url=static.nike.com/a/images/t_prod_pc/w_960,c_limit,q_auto,f_auto/3c4c64d0-826b-4303-a7be-37d46144c79a/air-max-dolce-light-magenta-fur-damen-ib4527-500-erscheinungsdatum.jpg",
+  },
+];
+
+const out = document.getElementById("out");
+
+CASES.forEach((c, i) => {
+  const box = document.createElement("div");
+  box.className = "case";
+  box.innerHTML = `<div><strong>${c.name}</strong></div>
+    <div style="color:#555">${c.note}</div>
+    <div class="verdict pending" id="v${i}">… loading</div>
+    <div><code>${c.url}</code></div>`;
+  out.appendChild(box);
+
+  const img = new Image();
+  const verdict = box.querySelector("#v" + i);
+  const timer = setTimeout(() => {
+    verdict.className = "verdict fail";
+    verdict.textContent = "FAIL — timed out after 15s";
+  }, 15000);
+
+  img.onload = () => {
+    clearTimeout(timer);
+    verdict.className = "verdict pass";
+    verdict.textContent = `PASS — loaded, ${img.naturalWidth}×${img.naturalHeight}px`;
+    box.appendChild(img);
+  };
+  img.onerror = () => {
+    clearTimeout(timer);
+    verdict.className = "verdict fail";
+    verdict.textContent = "FAIL — the host refused or the URL did not resolve";
+  };
+  img.referrerPolicy = "strict-origin-when-cross-origin";
+  img.src = c.url;
+});
+</script>
