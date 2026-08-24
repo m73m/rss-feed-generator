@@ -547,6 +547,11 @@ class Source:
     feed_description: str
     parse: Callable[[str, str], list[dict]]
     language: str = "hr"
+    # Optional channel icon. Without one a reader guesses, usually by
+    # fetching the favicon of whatever base_url points at. Must be a GIF,
+    # JPEG or PNG — the RSS spec allows nothing else here, and readers that
+    # honour <image> at all tend to ignore an SVG.
+    image_url: str | None = None
 
 
 SOURCES: tuple[Source, ...] = (
@@ -698,6 +703,8 @@ def build_feed(
     fg.link(href=source.base_url, rel="alternate")
     fg.description(source.feed_description)
     fg.language(source.language)
+    if source.image_url:
+        fg.image(url=source.image_url, title=source.feed_title, link=source.base_url)
     # Reusing the previous build date when the items are unchanged keeps the
     # output byte-identical, so the workflow has nothing to commit.
     fg.lastBuildDate(last_build_date or datetime.now(timezone.utc))
