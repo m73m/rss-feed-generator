@@ -9,7 +9,7 @@ Each source writes its own feed file in the repo root:
 | --- |
 | `sportnet_feed.xml` |
 | `fsb_feed.xml` |
-| `nike_feed.xml` |
+| `nike_launch_feed.xml` |
 
 ## How it works
 
