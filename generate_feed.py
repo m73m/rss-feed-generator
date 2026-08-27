@@ -552,6 +552,13 @@ class Source:
     # JPEG or PNG — the RSS spec allows nothing else here, and readers that
     # honour <image> at all tend to ignore an SVG.
     image_url: str | None = None
+    # Whether the listing is reliably newest-first. When it is, scraping can
+    # stop at the previous run's newest item, since everything past it is
+    # already published. A listing that reorders itself — say one driven by
+    # stock rather than publication date — breaks that assumption: once the
+    # marker drifts down the page, scraping stops above genuinely new items
+    # and never sees them. Such a source must be read in full every run.
+    newest_first: bool = True
 
 
 SOURCES: tuple[Source, ...] = (
@@ -582,6 +589,12 @@ SOURCES: tuple[Source, ...] = (
         feed_description="Automatically generated RSS feed of in-stock launch products from nike.com",
         parse=parse_product_cards,
         language="de",
+        # This listing reorders itself between runs — the same items come
+        # back in a different order as stock changes — so it cannot be read
+        # incrementally. Observed live: a run with no added or removed items
+        # still moved the previously-newest item down the page, which would
+        # then have cut short every later scrape.
+        newest_first=False,
     ),
 )
 
@@ -767,8 +780,11 @@ def generate(source: Source) -> bool:
     log.info("--- %s ---", source.name)
     previous, previous_build_date = load_previous_feed(source.output_path)
 
-    # Only the previous feed's newest item is used as the stopping marker.
-    stop_link = previous[0]["link"] if previous else None
+    # Only the previous feed's newest item is used as the stopping marker,
+    # and only where the listing is ordered newest-first. A listing that
+    # reorders itself would otherwise cut the scrape short above items it
+    # has since moved down the page.
+    stop_link = previous[0]["link"] if previous and source.newest_first else None
 
     try:
         new_articles = fetch_all_articles(source, stop_link)
@@ -786,16 +802,21 @@ def generate(source: Source) -> bool:
         if not article.get("published"):
             article["published"] = first_seen
 
-    # Newly scraped items are the most recent, so they lead; the previous
-    # feed's entries follow to preserve history. Without carrying them over,
-    # a run that found nothing new would publish an empty feed.
-    new_links = {article["link"] for article in new_articles}
-    articles = new_articles + [item for item in previous if item["link"] not in new_links]
-    articles = articles[:MAX_ITEMS]
+    # Genuinely new items lead; the previous feed's entries follow in the
+    # order already published. Without carrying them over, a run that found
+    # nothing new would publish an empty feed.
+    #
+    # Only items absent from the previous feed count as new. A full scrape
+    # re-reads items already published, and taking the scraped copy would
+    # reshuffle them into the listing's current order — churning the feed,
+    # and its git history, every time the source reorders itself.
+    previous_links = {item["link"] for item in previous}
+    fresh = [a for a in new_articles if a["link"] not in previous_links]
+    articles = (fresh + previous)[:MAX_ITEMS]
 
     log.info(
-        "%d new, %d carried over, %d total item(s).",
-        len(new_articles), len(articles) - len(new_articles), len(articles),
+        "%d scraped, %d new, %d carried over, %d total item(s).",
+        len(new_articles), len(fresh), len(articles) - len(fresh), len(articles),
     )
 
     if not articles:
