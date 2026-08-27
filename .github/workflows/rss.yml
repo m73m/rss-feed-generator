@@ -6,19 +6,20 @@ on:
     # boundary: GitHub delays or silently drops scheduled runs during
     # high-load periods, and :00 is the busiest minute.
     - cron: "23 */2 * * *"
-    # Slower-moving sources, twice a day at 06:23 and 18:23 UTC — 07:23 and
-    # 19:23 CET. Cron is UTC-only and cannot follow DST, so while Central
-    # Europe is on CEST these land an hour later locally (08:23 / 20:23).
-    - cron: "23 6,18 * * *"
+    # Slower-moving sources, every 4 hours. The hours are chosen to keep the
+    # original 06:23 and 18:23 UTC slots — 07:23 and 19:23 CET — and space
+    # the rest evenly around them. Cron is UTC-only and cannot follow DST,
+    # so while Central Europe is on CEST these land an hour later locally.
+    - cron: "23 2,6,10,14,18,22 * * *"
   workflow_dispatch: {}
 
 permissions:
   contents: write
 
-# The two schedules both fire at 06:23 and 18:23, and GitHub starts a
-# separate run per matching cron entry. Without this, those two runs would
-# race to push and one would be rejected as non-fast-forward; queueing them
-# means the second checks out the first's commit.
+# The two schedules overlap on every hour the slower one fires, and GitHub
+# starts a separate run per matching cron entry. Without this, those two
+# runs would race to push and one would be rejected as non-fast-forward;
+# queueing them means the second checks out the first's commit.
 concurrency:
   group: feeds
   cancel-in-progress: false
@@ -42,7 +43,7 @@ jobs:
         id: select
         run: |
           case "${{ github.event.schedule }}" in
-            "23 6,18 * * *") args="--only nike fsb" ;;
+            "23 2,6,10,14,18,22 * * *") args="--only nike fsb" ;;
             "23 */2 * * *")  args="--exclude nike fsb" ;;
             *)               args="" ;;  # manual dispatch: every source
           esac

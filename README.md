@@ -53,8 +53,8 @@ Each source writes its own feed file in the repo root:
   commit behind. A fresh build date is written as soon as the items change.
 - `.github/workflows/rss.yml` runs the script on two schedules and commits
   any feed file that changed back to the repo: one every 2 hours for
-  frequently-updated sources, one twice a day at 07:23 and 19:23 CET for
-  slower-moving ones. Which sources belong to which schedule is set in the
+  frequently-updated sources, one every 4 hours (07:23 and 19:23 CET among
+  them) for slower-moving ones. Which sources belong to which schedule is set in the
   workflow's source-selection step. Both fire at `:23` rather than `:00` on
   purpose — GitHub delays and sometimes drops scheduled runs at the top of
   the hour, when load peaks. A manual `workflow_dispatch` runs every source.
